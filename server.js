@@ -1,48 +1,56 @@
-import express from 'express';
-import mongoose from 'mongoose';
+import { MongoClient } from 'mongodb';
+import dotenv from 'dotenv';
 import cors from 'cors';
+import express from 'express';
 import apiRoutes from './routes/api.js';
+import dns from 'dns';
+
+// 设置 DNS 解析策略
+dns.setDefaultResultOrder('ipv4first');
+
+dotenv.config();
 
 const app = express();
+const uri = process.env.MONGODB_URI;
+console.log('Attempting to connect with URI:', uri.replace(/:([^:@]+)@/, ':****@'));
 
-// 更新 CORS 配置
-app.use(cors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
-}));
+// 简化客户端配置
+const client = new MongoClient(uri);
 
-// 添加一些基本的中间件
+app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Basic route to test if server is running
-app.get('/', (req, res) => {
-    res.json({ message: 'Server is running' });
-});
-
-// MongoDB connection
-try {
-    await mongoose.connect('mongodb://127.0.0.1:27017/NFTS');
-    console.log('Successfully connected to MongoDB.');
-} catch (error) {
-    console.error('Error connecting to MongoDB:', error);
-    process.exit(1);
+async function connectDB() {
+    try {
+        console.log('Attempting to connect to MongoDB...');
+        await client.connect();
+        console.log('Connected to MongoDB');
+        
+        // 明确指定使用 NFTS 数据库
+        const db = client.db('NFTS');
+        app.locals.db = db;
+        
+        app.use('/api', apiRoutes);
+        
+        const PORT = process.env.PORT || 3001;
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    } catch (error) {
+        console.error('MongoDB connection error:', error);
+        process.exit(1);
+    }
 }
 
-// Use API routes
-app.use('/api', apiRoutes);
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Something broke!' });
+process.on('SIGINT', async () => {
+    try {
+        await client.close();
+        console.log('MongoDB connection closed');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error closing MongoDB connection:', error);
+        process.exit(1);
+    }
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Test endpoint: http://localhost:${PORT}/api/test`);
-    console.log(`NFTs endpoint: http://localhost:${PORT}/api/nfts`);
-}); 
+connectDB().catch(console.error); 

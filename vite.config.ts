@@ -8,22 +8,11 @@ export default defineConfig({
 		host: "0.0.0.0",
 		port: 5173,
 		proxy: {
-			'^/api/.*': {
+			'/api': {
 				target: 'http://localhost:3001',
 				changeOrigin: true,
 				secure: false,
-				ws: true,
-				configure: (proxy, options) => {
-					proxy.on('error', (err, req, res) => {
-						console.log('proxy error', err);
-					});
-					proxy.on('proxyReq', (proxyReq, req, res) => {
-						console.log('Sending Request:', req.method, req.url);
-					});
-					proxy.on('proxyRes', (proxyRes, req, res) => {
-						console.log('Received Response:', proxyRes.statusCode, req.url);
-					});
-				}
+				rewrite: (path) => path.replace(/^\/api/, '/api')
 			}
 		}
 	},
